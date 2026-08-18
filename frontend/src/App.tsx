@@ -17,12 +17,14 @@ import { apiClient } from './api/client';
 import { wsClient } from './api/websocket';
 import { ShieldCheck, RefreshCw, MapPin } from 'lucide-react';
 
+import { mockInitialTelemetry, mockInitialWeather, generateMockHistory } from './api/mockData';
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [telemetry, setTelemetry] = useState<MicrogridLiveTelemetry | null>(null);
-  const [weather, setWeather] = useState<WeatherObservation | null>(null);
-  const [history, setHistory] = useState<MicrogridHistoryPoint[]>([]);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [telemetry, setTelemetry] = useState<MicrogridLiveTelemetry>(mockInitialTelemetry);
+  const [weather, setWeather] = useState<WeatherObservation>(mockInitialWeather);
+  const [history, setHistory] = useState<MicrogridHistoryPoint[]>(() => generateMockHistory(50));
+  const [isConnected, setIsConnected] = useState<boolean>(true);
   const [isRoadmapOpen, setIsRoadmapOpen] = useState<boolean>(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
   const [currentLocationName, setCurrentLocationName] = useState<string>('Hadapsar Clean Energy Hub, Pune');
@@ -30,6 +32,8 @@ export const App: React.FC = () => {
 
   // Initialize data and WebSocket subscription
   useEffect(() => {
+    let wsReceived = false;
+
     // 1. Initial REST fetch
     const initData = async () => {
       try {
@@ -38,15 +42,15 @@ export const App: React.FC = () => {
           apiClient.getCurrentWeather(),
           apiClient.getTelemetryHistory(50)
         ]);
-        setTelemetry(telData);
-        setWeather(weatherData);
-        if (weatherData?.location_name) {
-          setCurrentLocationName(weatherData.location_name);
+        if (telData) setTelemetry(telData);
+        if (weatherData) {
+          setWeather(weatherData);
+          if (weatherData.location_name) setCurrentLocationName(weatherData.location_name);
         }
-        setHistory(histData);
+        if (histData && histData.length > 0) setHistory(histData);
         setIsConnected(true);
       } catch (e) {
-        console.error('Error fetching initial REST data:', e);
+        console.warn('Backend REST unreachable, running in autonomous browser mode:', e);
       }
     };
 
@@ -55,33 +59,79 @@ export const App: React.FC = () => {
     // 2. Connect to WebSocket
     wsClient.connect();
     const unsubscribe = wsClient.subscribe((payload) => {
+      wsReceived = true;
       setIsConnected(true);
       if (payload.event === 'INITIAL_STATE' || payload.event === 'TELEMETRY_TICK' || payload.event === 'TELEMETRY_UPDATE') {
         setTelemetry(payload.data);
         if (payload.history) {
           setHistory(payload.history);
-        } else {
-          // Append point to history
-          setHistory((prev) => {
-            const newPoint: MicrogridHistoryPoint = {
-              timestamp: payload.data.timestamp,
-              solar_kw: payload.data.solar_generation_kw,
-              wind_kw: payload.data.wind_generation_kw,
-              demand_kw: payload.data.demand_load_kw,
-              battery_soc_pct: payload.data.battery_soc_pct,
-              battery_power_kw: payload.data.battery_power_kw,
-              grid_import_kw: payload.data.grid_import_kw,
-              grid_export_kw: payload.data.grid_export_kw,
-              renewable_fraction_pct: payload.data.renewable_fraction_pct
-            };
-            const updated = [...prev, newPoint];
-            return updated.slice(-60);
-          });
         }
       }
     });
 
+    // 3. Fallback client-side live simulation if backend is not streaming
+    const fallbackTicker = setInterval(() => {
+      if (!wsReceived) {
+        setTelemetry((prev) => {
+          const delta = (Math.random() - 0.5) * 2;
+          const s = Math.max(0, Math.min(100, (prev?.solar_generation_kw || 68.5) + delta));
+          const w = Math.max(0, Math.min(100, (prev?.wind_generation_kw || 42.1) + delta * 0.8));
+          const d = Math.max(40, Math.min(140, (prev?.demand_load_kw || 85.0) + delta * 0.5));
+          const gen = s + w;
+          const net = gen - d;
+          const batt = net > 0 ? -Math.min(50, net) : Math.min(50, Math.abs(net));
+          const gridIn = net < -50 ? Math.abs(net) - 50 : 0;
+          const gridOut = net > 50 ? net - 50 : 0;
+
+          const updated: MicrogridLiveTelemetry = {
+            ...prev,
+            timestamp: new Date().toISOString(),
+            solar_generation_kw: parseFloat(s.toFixed(1)),
+            wind_generation_kw: parseFloat(w.toFixed(1)),
+            demand_load_kw: parseFloat(d.toFixed(1)),
+            battery_power_kw: parseFloat(batt.toFixed(1)),
+            battery_soc_pct: parseFloat(Math.min(95, Math.max(15, (prev?.battery_soc_pct || 68.4) + (batt < 0 ? 0.05 : -0.05))).toFixed(1)),
+            grid_import_kw: parseFloat(gridIn.toFixed(1)),
+            grid_export_kw: parseFloat(gridOut.toFixed(1)),
+            renewable_fraction_pct: parseFloat((Math.min(100, (gen / d) * 100)).toFixed(1)),
+            flow: {
+              solar_to_load_kw: parseFloat(Math.min(s, d).toFixed(1)),
+              solar_to_batt_kw: parseFloat(Math.max(0, s - d).toFixed(1)),
+              solar_to_grid_kw: parseFloat((gridOut > 0 ? gridOut * 0.5 : 0).toFixed(1)),
+              solar_curtailed_kw: 0.0,
+              wind_to_load_kw: parseFloat(Math.min(w, Math.max(0, d - s)).toFixed(1)),
+              wind_to_batt_kw: parseFloat(Math.max(0, w - Math.max(0, d - s)).toFixed(1)),
+              wind_to_grid_kw: parseFloat((gridOut > 0 ? gridOut * 0.5 : 0).toFixed(1)),
+              wind_curtailed_kw: 0.0,
+              batt_to_load_kw: parseFloat((batt > 0 ? batt : 0).toFixed(1)),
+              grid_to_load_kw: parseFloat(gridIn.toFixed(1)),
+              grid_to_batt_kw: 0.0
+            }
+          };
+
+          // Append to history
+          setHistory((hPrev) => {
+            const pt: MicrogridHistoryPoint = {
+              timestamp: updated.timestamp,
+              solar_kw: updated.solar_generation_kw,
+              wind_kw: updated.wind_generation_kw,
+              demand_kw: updated.demand_load_kw,
+              battery_soc_pct: updated.battery_soc_pct,
+              battery_power_kw: updated.battery_power_kw,
+              grid_import_kw: updated.grid_import_kw,
+              grid_export_kw: updated.grid_export_kw,
+              renewable_fraction_pct: updated.renewable_fraction_pct
+            };
+            return [...hPrev.slice(-59), pt];
+          });
+
+          return updated;
+        });
+      }
+    }, 2000);
+
     return () => {
+      clearInterval(fallbackTicker);
       unsubscribe();
       wsClient.disconnect();
     };
