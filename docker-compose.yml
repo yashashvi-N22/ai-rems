@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # 1. FastAPI + ML Engine Backend
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai-rems-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+      - OPEN_METEO_BASE_URL=https://api.open-meteo.com/v1/forecast
+      - PLANT_LATITUDE=18.5089
+      - PLANT_LONGITUDE=73.9260
+      - PLANT_LOCATION_NAME=Hadapsar Clean Energy Hub, Pune, Maharashtra
+      - PLANT_CAPACITY_SOLAR_KW=100.0
+      - PLANT_CAPACITY_WIND_KW=100.0
+      - BESS_CAPACITY_KWH=200.0
+      - BESS_MAX_POWER_KW=50.0
+      - BESS_MIN_SOC_PCT=15.0
+      - BESS_MAX_SOC_PCT=95.0
+      - BESS_INITIAL_SOC_PCT=65.0
+      - BESS_ROUND_TRIP_EFFICIENCY=0.95
+      - TELEMETRY_SIMULATION_INTERVAL_SEC=0.5
+      - WEATHER_POLL_INTERVAL_MINUTES=5
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      - ./ml_engine/data:/app/ml_engine/data
+      - ./ml_engine/models/saved_weights:/app/ml_engine/models/saved_weights
+    networks:
+      - ai-rems-network
+
+  # 2. React Vite + Nginx Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ai-rems-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - ai-rems-network
+
+networks:
+  ai-rems-network:
+    driver: bridge

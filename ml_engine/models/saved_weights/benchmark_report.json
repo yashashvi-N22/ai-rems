@@ -1,0 +1,170 @@
+{
+  "timestamp": "2026-08-18T05:46:46.442063+00:00",
+  "dataset_hours": 8760,
+  "train_hours": 6132,
+  "test_hours": 1314,
+  "domains": {
+    "solar": {
+      "target_column": "solar_generation_kw",
+      "mean_actual_kw": 16.02,
+      "max_actual_kw": 62.9,
+      "models": {
+        "Baseline_Seasonal_Naive": {
+          "mae": 0.65,
+          "rmse": 1.4,
+          "mape_pct": 5.77,
+          "r2_score": 0.9958,
+          "skill_score_pct": 82.55
+        },
+        "XGBoost_Quantile": {
+          "mae": 0.13,
+          "rmse": 0.24,
+          "mape_pct": 1.1,
+          "r2_score": 0.9999,
+          "skill_score_pct": 96.95
+        },
+        "PyTorch_BiLSTM_Attention": {
+          "mae": 1.49,
+          "rmse": 2.53,
+          "mape_pct": 34.13,
+          "r2_score": 0.9862,
+          "skill_score_pct": 68.4
+        }
+      },
+      "top_feature_drivers": [
+        {
+          "feature": "ghi",
+          "importance": 0.6129
+        },
+        {
+          "feature": "zenith_deg",
+          "importance": 0.1863
+        },
+        {
+          "feature": "dni",
+          "importance": 0.0918
+        },
+        {
+          "feature": "dhi",
+          "importance": 0.0686
+        },
+        {
+          "feature": "hour_cos",
+          "importance": 0.0347
+        },
+        {
+          "feature": "solar_lag24",
+          "importance": 0.003
+        }
+      ]
+    },
+    "wind": {
+      "target_column": "wind_generation_kw",
+      "mean_actual_kw": 10.53,
+      "max_actual_kw": 100.0,
+      "models": {
+        "Baseline_Seasonal_Naive": {
+          "mae": 15.92,
+          "rmse": 29.43,
+          "mape_pct": 270.94,
+          "r2_score": -0.8468,
+          "skill_score_pct": 3.08
+        },
+        "XGBoost_Quantile": {
+          "mae": 0.11,
+          "rmse": 0.32,
+          "mape_pct": 1.08,
+          "r2_score": 0.9998,
+          "skill_score_pct": 98.95
+        },
+        "PyTorch_BiLSTM_Attention": {
+          "mae": 14.74,
+          "rmse": 23.65,
+          "mape_pct": 283.74,
+          "r2_score": -0.1927,
+          "skill_score_pct": 22.11
+        }
+      },
+      "top_feature_drivers": [
+        {
+          "feature": "wind_speed_10m",
+          "importance": 0.495
+        },
+        {
+          "feature": "wind_speed_100m",
+          "importance": 0.3684
+        },
+        {
+          "feature": "wind_kinetic_cube",
+          "importance": 0.1361
+        },
+        {
+          "feature": "wind_lag24",
+          "importance": 0.0001
+        },
+        {
+          "feature": "weekday_sin",
+          "importance": 0.0
+        },
+        {
+          "feature": "air_density_kg_m3",
+          "importance": 0.0
+        }
+      ]
+    },
+    "demand": {
+      "target_column": "demand_load_kw",
+      "mean_actual_kw": 46.92,
+      "max_actual_kw": 89.44,
+      "models": {
+        "Baseline_Seasonal_Naive": {
+          "mae": 7.1,
+          "rmse": 11.65,
+          "mape_pct": 17.01,
+          "r2_score": 0.6155,
+          "skill_score_pct": -99.48
+        },
+        "XGBoost_Quantile": {
+          "mae": 1.92,
+          "rmse": 2.43,
+          "mape_pct": 4.46,
+          "r2_score": 0.9832,
+          "skill_score_pct": 58.33
+        },
+        "PyTorch_BiLSTM_Attention": {
+          "mae": 2.22,
+          "rmse": 2.77,
+          "mape_pct": 5.67,
+          "r2_score": 0.9783,
+          "skill_score_pct": 52.63
+        }
+      },
+      "top_feature_drivers": [
+        {
+          "feature": "demand_lag168",
+          "importance": 0.7324
+        },
+        {
+          "feature": "demand_lag1",
+          "importance": 0.1752
+        },
+        {
+          "feature": "hdd_heating_deg",
+          "importance": 0.0255
+        },
+        {
+          "feature": "hour_cos",
+          "importance": 0.0171
+        },
+        {
+          "feature": "demand_lag24",
+          "importance": 0.0093
+        },
+        {
+          "feature": "temperature_c",
+          "importance": 0.0064
+        }
+      ]
+    }
+  }
+}
