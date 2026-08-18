@@ -1,5 +1,5 @@
 import { MicrogridLiveTelemetry, WeatherObservation, MicrogridHistoryPoint } from '../types/microgrid';
-import { ModelBenchmarkData, MultiDomainForecast, OptimizationResponse, AnomalyDiagnosticResponse, RLBenchmarkResponse, SimulationResponse } from './client';
+import { ModelBenchmarkData, MultiDomainForecast, OptimizationResponse, AnomalyDiagnosticResponse, RLBenchmarkResponse, SimulationResponse, ChatResponse } from './client';
 
 export const mockInitialWeather: WeatherObservation = {
   timestamp: new Date().toISOString(),
@@ -531,4 +531,46 @@ export const mockTreeShapWaterfall = (domain = "solar", hourIndex = 12) => {
       ]
     };
   }
+};
+
+export const generateCoPilotResponse = (prompt: string): ChatResponse => {
+  const p = prompt.toLowerCase();
+  let response = "";
+  const context: Record<string, string> = {
+    "Plant ID": "Hadapsar Clean Energy Hub, Pune (100 kW PV + 100 kW Wind + 200 kWh BESS)",
+    "Operating State": "Grid-Connected Balanced Microgrid",
+    "Current Tariff": "₹7.50 / kWh (Off-Peak ₹6.40, Peak ₹11.00)",
+    "Battery Status": "SOC 68.4% • Charging at 22.5 kW"
+  };
+
+  if (p.includes("battery") || p.includes("charge") || p.includes("soc")) {
+    response = `🔋 **Battery Dispatch Decision Reasoning:**\n\nThe 200 kWh BESS is currently charging at **22.5 kW** (SOC: 68.4%).\n\n• **Physical Logic**: Total clean generation (Solar: 68.5 kW + Wind: 42.1 kW = 110.6 kW) exceeds campus demand (85.0 kW) by 25.6 kW.\n• **Economic Optimization**: Google OR-Tools MILP is storing this surplus clean energy now so it can be discharged during the evening peak tariff window (18:00–22:00 @ ₹11.00/kWh), avoiding costly grid purchases.`;
+    context["Optimizer Strategy"] = "Surplus Renewable Storage for Peak Tariff Arbitrage";
+  } else if (p.includes("money") || p.includes("save") || p.includes("milp") || p.includes("cost") || p.includes("saving")) {
+    response = `💰 **Financial Savings & Optimization Performance:**\n\n• **Unoptimized Baseline Cost**: ₹1,480.50 / day\n• **AI-REMS MILP Optimal Cost**: ₹1,184.20 / day\n• **Net Daily Savings**: **₹296.30 (20.02% reduction)**\n• **Annual Projected Cost Avoidance**: ₹1,08,150 per microgrid node.\n\nSavings are achieved by scheduling zero-emission solar and wind to displace peak diesel/grid power and restricting battery cycling to 0.85 EFC/day to preserve pack longevity.`;
+    context["MILP Solver Status"] = "OPTIMAL (Solve time: 4.2 ms)";
+  } else if (p.includes("anomaly") || p.includes("alert") || p.includes("maintenance") || p.includes("health")) {
+    response = `🛡️ **Isolation Forest Anomaly & Predictive Health Summary:**\n\nOverall System Health Index is **96.9% (Nominal)**.\n\n• **Active Alert 1**: String 3 Solar PV optical soiling detected (Transmittance 0.88 vs 1.0 nominal). Recommendation: Trigger robotic dry wiper cycle.\n• **Active Alert 2**: Wind Turbine nacelle 3.2° yaw drift against southwest wind vector. Recommendation: Recalibrate ultrasonic anemometer zero-point offset.\n• **Trip Risk**: Zero trip conditions detected across all 4 electrical buses.`;
+    context["Health Status"] = "96.9% Optimal • 2 Active Prescriptive Alerts";
+  } else if (p.includes("shap") || p.includes("solar") || p.includes("driver") || p.includes("feature")) {
+    response = `📊 **TreeSHAP Game-Theoretic Explainability Breakdown:**\n\nFor Solar PV Generation (100 kW array):\n\n1. **Direct Normal Irradiance (DNI)**: +62.4% relative gain contribution (+42.8 kW at midday).\n2. **Diffuse Sky Radiation**: +14.2% contribution under cloud scatter.\n3. **Atmospheric Clearness Index (Kt)**: +8.8% contribution.\n4. **PV Cell Temperature Derating**: -5.2% negative derating penalty when module temperature exceeds 45°C.`;
+    context["SHAP Explainer"] = "TreeExplainer (XGBoost Quantile P50 Baseline E[f(x)] = 24.5 kW)";
+  } else if (p.includes("rl") || p.includes("ppo") || p.includes("gym")) {
+    response = `🤖 **PPO Reinforcement Learning vs MILP Comparative Analysis:**\n\n• **Inference Latency**: PPO agent executes in **0.35 ms** (12x faster than MILP @ 4.20 ms), enabling sub-second inverter PWM setpoint tracking.\n• **Economic Capture**: PPO achieves **₹1,228.40 / day** (17.03% savings), capturing **85%** of theoretical global MILP optimum without requiring perfect 24h weather lookahead.\n• **Self-Consumption**: 91.8% renewable utilization with zero load shedding.`;
+    context["RL Architecture"] = "Continuous Actor-Critic (Clip ε=0.2, γ=0.99)";
+  } else {
+    response = `⚡ **AI-REMS Grounded Operations Report:**\n\nMicrogrid node is operating at **100% renewable self-sufficiency** (Solar: 68.5 kW, Wind: 42.1 kW, Demand: 85.0 kW). The BESS battery is at **68.4% SOC**, zero power is imported from the utility grid, and 3.1 kW clean surplus is being exported. Overall system health index is **96.9%**.`;
+  }
+
+  return {
+    response,
+    grounded_context_used: context,
+    suggested_followups: [
+      "Why is the battery charging right now?",
+      "How much money did the MILP optimizer save today?",
+      "Explain active anomaly alerts and maintenance actions.",
+      "What are the primary TreeSHAP drivers for solar generation?"
+    ],
+    timestamp: new Date().toISOString()
+  };
 };

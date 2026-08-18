@@ -225,7 +225,8 @@ import {
   mockRLTrajectory,
   mockDigitalTwinSimulation,
   mockTreeShapGlobal,
-  mockTreeShapWaterfall
+  mockTreeShapWaterfall,
+  generateCoPilotResponse
 } from './mockData';
 
 export const apiClient = {
@@ -449,21 +450,7 @@ export const apiClient = {
       }, { timeout: 5000 });
       return res.data.data;
     } catch {
-      return {
-        response: `Based on live microgrid telemetry for the Hadapsar, Pune Hub (100 kW Solar + 100 kW Wind + 200 kWh BESS): The battery is currently maintaining stable State of Charge (SOC 68.4%) with zero unserved load and 100% renewable fraction. Google OR-Tools MILP optimization is delivering +20.0% cost reduction under current Time-of-Use tariffs.`,
-        grounded_context_used: {
-          "Plant": "Hadapsar Clean Energy Hub, Pune (100 kW Solar + 100 kW Wind + 200 kWh BESS)",
-          "Live Generation": "Solar: 68.5 kW, Wind: 42.1 kW, Demand: 85.0 kW",
-          "Battery Status": "SOC: 68.4%, Flow: -22.5 kW (Charging)",
-          "System Health": "96.9% Normal"
-        },
-        suggested_followups: [
-          "Explain the current battery charge decision",
-          "What is our estimated carbon offset today?",
-          "How does PPO RL compare to MILP?"
-        ],
-        timestamp: new Date().toISOString()
-      };
+      return generateCoPilotResponse(message);
     }
   },
 
