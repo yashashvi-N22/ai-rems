@@ -1,5 +1,5 @@
 import { MicrogridLiveTelemetry, WeatherObservation, MicrogridHistoryPoint } from '../types/microgrid';
-import { ModelBenchmarkData, MultiDomainForecast, OptimizationResponse, AnomalyDiagnosticResponse, RLBenchmarkResponse } from './client';
+import { ModelBenchmarkData, MultiDomainForecast, OptimizationResponse, AnomalyDiagnosticResponse, RLBenchmarkResponse, SimulationResponse } from './client';
 
 export const mockInitialWeather: WeatherObservation = {
   timestamp: new Date().toISOString(),
@@ -269,26 +269,129 @@ export const mockOptimizationSchedule: OptimizationResponse = {
   }
 };
 
+export const mockDigitalTwinSimulation = (scenarioId = "CLOUD_COVER_STORM"): SimulationResponse => {
+  const isBlackout = scenarioId === "GRID_BLACKOUT";
+  const isStorm = scenarioId === "CLOUD_COVER_STORM";
+  const isWindDrought = scenarioId === "WIND_DROUGHT";
+  const isLoadSpike = scenarioId === "INDUSTRIAL_LOAD_SPIKE";
+
+  const timesteps = Array.from({ length: 24 }).map((_, h) => {
+    const isDay = h >= 6 && h <= 18;
+    const isOutageHour = isBlackout && h >= 17 && h <= 22;
+    const sFactor = isStorm ? 0.20 : 1.0;
+    const wFactor = isWindDrought ? 0.20 : isStorm ? 1.45 : 1.0;
+    const dFactor = isLoadSpike ? 1.85 : 1.0;
+
+    const solar = isDay ? Math.sin(((h - 6) / 12) * Math.PI) * 95 * sFactor : 0;
+    const wind = (35 + Math.sin(h * 0.4) * 15) * wFactor;
+    const demand = (60 + (h >= 18 && h <= 22 ? 45 : isDay ? 30 : 10)) * dFactor;
+    const gridAvail = !isOutageHour;
+    const soc = Math.min(95, Math.max(20, 65 + Math.sin(h * 0.3) * 25));
+
+    return {
+      hour: h + 1,
+      time: new Date(Date.now() + h * 3600000).toISOString(),
+      solar_gen_kw: parseFloat(solar.toFixed(1)),
+      wind_gen_kw: parseFloat(wind.toFixed(1)),
+      demand_load_kw: parseFloat(demand.toFixed(1)),
+      battery_power_kw: isOutageHour ? 45.0 : -15.0,
+      battery_soc_pct: parseFloat(soc.toFixed(1)),
+      grid_import_kw: gridAvail ? (demand > solar + wind ? parseFloat((demand - (solar + wind)).toFixed(1)) : 0) : 0,
+      grid_export_kw: gridAvail && solar + wind > demand ? parseFloat(((solar + wind) - demand).toFixed(1)) : 0,
+      unserved_load_kw: 0.0,
+      curtailed_energy_kw: 0.0,
+      grid_available: gridAvail,
+      system_frequency_hz: 50.0 + (Math.random() - 0.5) * 0.1,
+      stability_status: "NOMINAL_STABLE"
+    };
+  });
+
+  return {
+    scenario_name: scenarioId,
+    run_timestamp: new Date().toISOString(),
+    horizon_hours: 24,
+    total_solar_kwh: 580.0,
+    total_wind_kwh: 720.0,
+    total_demand_kwh: 1250.0,
+    total_unserved_energy_kwh: 0.0,
+    total_curtailed_kwh: 0.0,
+    max_grid_import_kw: isBlackout ? 0.0 : 42.0,
+    min_battery_soc_pct: 22.4,
+    max_battery_soc_pct: 92.0,
+    islanding_resilience_score_pct: 100.0,
+    grid_outage_survived: true,
+    summary_notes: "Physics Digital Twin completed 24-step simulation with 100% microgrid survivability.",
+    timesteps
+  };
+};
+
 export const mockDiagnosticsReport: AnomalyDiagnosticResponse = {
   scanned_at: new Date().toISOString(),
   overall_system_health_index_pct: 96.9,
-  active_anomaly_count: 1,
+  active_anomaly_count: 2,
   critical_alerts_count: 0,
   equipment_health: [
-    { name: "Solar PV Array", health_pct: 95.5, status: "HEALTHY", mtbf_hours: 18400 },
-    { name: "Wind Turbine Nacelle", health_pct: 97.2, status: "HEALTHY", mtbf_hours: 12200 },
-    { name: "BESS Storage Rack", health_pct: 98.4, status: "HEALTHY", mtbf_hours: 25000 },
-    { name: "Grid Transformer Substation", health_pct: 96.5, status: "HEALTHY", mtbf_hours: 45000 }
+    {
+      equipment: "Solar PV Array (100 kW)",
+      health_index_pct: 94.2,
+      status: "OPTIMAL",
+      key_degradation_factor: "Dust & Soiling optical loss (-4.2%)",
+      mtbf_hours_estimate: 18500,
+      last_serviced_date: "14 Days Ago"
+    },
+    {
+      equipment: "Wind Turbine Nacelle (100 kW)",
+      health_index_pct: 96.8,
+      status: "OPTIMAL",
+      key_degradation_factor: "Bearing friction vibration nominal",
+      mtbf_hours_estimate: 24000,
+      last_serviced_date: "28 Days Ago"
+    },
+    {
+      equipment: "BESS Storage Pack (200 kWh)",
+      health_index_pct: 98.5,
+      status: "OPTIMAL",
+      key_degradation_factor: "SEI layer growth minimal (0.85 EFC/day)",
+      mtbf_hours_estimate: 35000,
+      last_serviced_date: "7 Days Ago"
+    },
+    {
+      equipment: "Substation Inverter Bus",
+      health_index_pct: 97.1,
+      status: "OPTIMAL",
+      key_degradation_factor: "Capacitor thermal ripple < 2.1°C",
+      mtbf_hours_estimate: 42000,
+      last_serviced_date: "45 Days Ago"
+    }
   ],
   active_alerts: [
     {
-      subsystem: "SOLAR_PV",
-      severity: "WARNING",
-      metric_name: "Dust Soiling Ratio",
-      observed_value: 0.88,
-      expected_value: 1.0,
+      id: "ALT-PV-2026-09",
       timestamp: new Date().toISOString(),
-      recommendation: "Schedule automated robotic dry wiper cleaning cycle in 48 hours."
+      equipment: "SOLAR_PV",
+      anomaly_type: "DUST_SOILING_OPTICAL_LOSS",
+      severity: "WARNING",
+      confidence_score: 0.94,
+      detected_value: 0.88,
+      expected_nominal_range: "0.95 - 1.00",
+      root_cause_analysis: "Optical transmittance degradation on String 3 due to particulate accumulation.",
+      recommended_maintenance_action: "Trigger autonomous dry wiper cleaning robot cycle.",
+      estimated_annual_loss_inr: 14200,
+      detection_timestamp: "12 mins ago"
+    },
+    {
+      id: "ALT-WD-2026-04",
+      timestamp: new Date().toISOString(),
+      equipment: "WIND_TURBINE",
+      anomaly_type: "YAW_MISALIGNMENT_DRIFT",
+      severity: "WARNING",
+      confidence_score: 0.91,
+      detected_value: 4.8,
+      expected_nominal_range: "0.0° - 2.5°",
+      root_cause_analysis: "3.2° yaw heading misalignment against dominant southwest monsoon wind vector.",
+      recommended_maintenance_action: "Recalibrate ultrasonic anemometer zero-point offset.",
+      estimated_annual_loss_inr: 8500,
+      detection_timestamp: "45 mins ago"
     }
   ]
 };
@@ -296,7 +399,7 @@ export const mockDiagnosticsReport: AnomalyDiagnosticResponse = {
 export const mockRLBenchmark: RLBenchmarkResponse = {
   evaluation_period: "24-Hour Horizon (100 kW Solar + 100 kW Wind + 200 kWh BESS)",
   strategies: {
-    rule_based: {
+    Rule_Based_Heuristic: {
       total_cost_inr: 1480.50,
       cost_savings_pct: 0.0,
       co2_emissions_kg: 172.5,
@@ -305,20 +408,20 @@ export const mockRLBenchmark: RLBenchmarkResponse = {
       inference_latency_ms: 0.02,
       description: "Greedy heuristic charging on surplus, discharging on deficit."
     },
-    ppo_reinforcement_learning: {
+    PPO_Reinforcement_Learning: {
       total_cost_inr: 1228.40,
       cost_savings_pct: 17.03,
       co2_emissions_kg: 144.2,
-      renewable_utilization_pct: 86.2,
+      renewable_utilization_pct: 91.8,
       battery_full_cycles: 0.92,
       inference_latency_ms: 0.35,
       description: "Continuous Actor-Critic PPO policy for sub-second real-time grid stabilization."
     },
-    deterministic_milp: {
+    MILP_Deterministic_Optimal: {
       total_cost_inr: 1184.20,
       cost_savings_pct: 20.02,
       co2_emissions_kg: 138.0,
-      renewable_utilization_pct: 92.4,
+      renewable_utilization_pct: 94.2,
       battery_full_cycles: 0.85,
       inference_latency_ms: 4.20,
       description: "Google OR-Tools CBC/HiGHS mathematical global optimum schedule."
@@ -331,24 +434,101 @@ export const mockRLBenchmark: RLBenchmarkResponse = {
   ]
 };
 
-export const mockTreeShapGlobal = [
-  { feature: "direct_normal_irradiance", mean_abs_shap: 18.42, relative_importance_pct: 62.4 },
-  { feature: "diffuse_radiation", mean_abs_shap: 4.18, relative_importance_pct: 14.2 },
-  { feature: "clearness_index_kt", mean_abs_shap: 2.60, relative_importance_pct: 8.8 },
-  { feature: "pv_cell_temp_c", mean_abs_shap: 1.92, relative_importance_pct: 6.5 },
-  { feature: "solar_zenith_deg", mean_abs_shap: 1.55, relative_importance_pct: 5.3 },
-  { feature: "solar_lag_1h", mean_abs_shap: 0.82, relative_importance_pct: 2.8 }
-];
+export const mockRLTrajectory = Array.from({ length: 24 }).map((_, step) => {
+  const isDay = step >= 6 && step <= 18;
+  const isPeak = step >= 18 && step <= 22;
+  const s = isDay ? Math.sin(((step - 6) / 12) * Math.PI) * 88 : 0;
+  const w = 35 + Math.sin(step * 0.4) * 14;
+  const d = 60 + (isPeak ? 45 : isDay ? 30 : 10);
+  const action = isPeak ? 35.0 : isDay ? -28.0 : 0.0;
+  const soc = isPeak ? 85 - (step - 18) * 12 : isDay ? 40 + (step - 6) * 4 : 45;
+  const gridIn = isPeak ? Math.max(0, d - (w + action)) : 0;
 
-export const mockTreeShapWaterfall = {
-  domain: "solar",
-  hour_index: 12,
-  base_value_kw: 28.5,
-  final_prediction_kw: 91.8,
-  features: [
-    { feature: "direct_normal_irradiance", feature_value: 785.0, shap_value: 48.2, direction: "POSITIVE" },
-    { feature: "diffuse_radiation", feature_value: 120.0, shap_value: 12.4, direction: "POSITIVE" },
-    { feature: "clearness_index_kt", feature_value: 0.78, shap_value: 6.2, direction: "POSITIVE" },
-    { feature: "pv_cell_temp_c", feature_value: 44.5, shap_value: -3.5, direction: "NEGATIVE" }
-  ]
+  return {
+    hour: step + 1,
+    action_setpoint_kw: action,
+    battery_soc_pct: parseFloat(Math.min(95, Math.max(15, soc)).toFixed(1)),
+    solar_kw: parseFloat(s.toFixed(1)),
+    wind_kw: parseFloat(w.toFixed(1)),
+    demand_kw: parseFloat(d.toFixed(1)),
+    grid_import_kw: parseFloat(gridIn.toFixed(1)),
+    hourly_cost_inr: parseFloat(((gridIn * (isPeak ? 11.0 : 7.50))).toFixed(1))
+  };
+});
+
+export const mockTreeShapGlobal = (domain = "solar") => {
+  if (domain === "solar") {
+    return [
+      { feature: "direct_normal_irradiance_wm2", importance_score: 0.624, importance_pct: 62.4, description: "Direct Normal Irradiance (Beam component)" },
+      { feature: "diffuse_horizontal_irradiance_wm2", importance_score: 0.142, importance_pct: 14.2, description: "Diffuse Sky Radiation" },
+      { feature: "clearness_index", importance_score: 0.088, importance_pct: 8.8, description: "Atmospheric Clearness Index (Kt)" },
+      { feature: "pv_cell_temperature_c", importance_score: 0.052, importance_pct: 5.2, description: "PV Cell Temperature derating" },
+      { feature: "solar_zenith_deg", importance_score: 0.045, importance_pct: 4.5, description: "Solar Zenith Angle (Elevation)" },
+      { feature: "solar_lag_1h", importance_score: 0.022, importance_pct: 2.2, description: "1-Hour Prior Generation Auto-Regressive Lag" }
+    ];
+  } else if (domain === "wind") {
+    return [
+      { feature: "wind_speed_100m_ms", importance_score: 0.585, importance_pct: 58.5, description: "100m Hub Height Wind Speed" },
+      { feature: "wind_power_proxy_v3", importance_score: 0.224, importance_pct: 22.4, description: "Kinetic Energy Cube Proxy (v³)" },
+      { feature: "air_density_kg_m3", importance_score: 0.078, importance_pct: 7.8, description: "Atmospheric Air Density ρ(T,P)" },
+      { feature: "wind_dir_sin", importance_score: 0.042, importance_pct: 4.2, description: "Wind Direction Compass Sine" },
+      { feature: "wind_lag_1h", importance_score: 0.031, importance_pct: 3.1, description: "1-Hour Prior Wind Lag" }
+    ];
+  } else {
+    return [
+      { feature: "demand_lag_24h", importance_score: 0.412, importance_pct: 41.2, description: "24-Hour Prior Daily Load Lag" },
+      { feature: "cooling_degree_days", importance_score: 0.235, importance_pct: 23.5, description: "Cooling Degree Days (HVAC Chiller Load)" },
+      { feature: "demand_lag_168h", importance_score: 0.145, importance_pct: 14.5, description: "168-Hour Prior Weekly Day-Match Lag" },
+      { feature: "temperature_c", importance_score: 0.082, importance_pct: 8.2, description: "Ambient Temperature (°C)" },
+      { feature: "is_weekend", importance_score: 0.048, importance_pct: 4.8, description: "Weekend Binary Indicator" }
+    ];
+  }
+};
+
+export const mockTreeShapWaterfall = (domain = "solar", hourIndex = 12) => {
+  if (domain === "solar") {
+    const isMidday = hourIndex >= 10 && hourIndex <= 15;
+    return {
+      domain,
+      hour_index: hourIndex,
+      base_value_kw: 24.5,
+      predicted_p50_kw: isMidday ? 88.4 : 18.2,
+      net_shap_delta: isMidday ? 63.9 : -6.3,
+      drivers: isMidday ? [
+        { feature: "direct_normal_irradiance_wm2", feature_value: "840 W/m²", shap_value: 42.8, direction: "POSITIVE" },
+        { feature: "solar_zenith_deg", feature_value: "24.2°", shap_value: 14.2, direction: "POSITIVE" },
+        { feature: "clearness_index", feature_value: "0.78", shap_value: 9.1, direction: "POSITIVE" },
+        { feature: "pv_cell_temperature_c", feature_value: "48.5°C", shap_value: -2.2, direction: "NEGATIVE" }
+      ] : [
+        { feature: "solar_zenith_deg", feature_value: "82.0°", shap_value: -16.5, direction: "NEGATIVE" },
+        { feature: "direct_normal_irradiance_wm2", feature_value: "120 W/m²", shap_value: -8.0, direction: "NEGATIVE" }
+      ]
+    };
+  } else if (domain === "wind") {
+    return {
+      domain,
+      hour_index: hourIndex,
+      base_value_kw: 38.0,
+      predicted_p50_kw: 54.2,
+      net_shap_delta: 16.2,
+      drivers: [
+        { feature: "wind_speed_100m_ms", feature_value: "10.8 m/s", shap_value: 12.4, direction: "POSITIVE" },
+        { feature: "wind_power_proxy_v3", feature_value: "1260 m³/s³", shap_value: 4.8, direction: "POSITIVE" },
+        { feature: "air_density_kg_m3", feature_value: "1.21 kg/m³", shap_value: -1.0, direction: "NEGATIVE" }
+      ]
+    };
+  } else {
+    return {
+      domain,
+      hour_index: hourIndex,
+      base_value_kw: 55.0,
+      predicted_p50_kw: 78.5,
+      net_shap_delta: 23.5,
+      drivers: [
+        { feature: "demand_lag_24h", feature_value: "76.2 kW", shap_value: 14.6, direction: "POSITIVE" },
+        { feature: "cooling_degree_days", feature_value: "14.2 CDD", shap_value: 6.4, direction: "POSITIVE" },
+        { feature: "hour_sin", feature_value: `Hour ${hourIndex}`, shap_value: 2.5, direction: "POSITIVE" }
+      ]
+    };
+  }
 };

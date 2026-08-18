@@ -222,6 +222,8 @@ import {
   mockOptimizationSchedule,
   mockDiagnosticsReport,
   mockRLBenchmark,
+  mockRLTrajectory,
+  mockDigitalTwinSimulation,
   mockTreeShapGlobal,
   mockTreeShapWaterfall
 } from './mockData';
@@ -367,23 +369,7 @@ export const apiClient = {
       const res = await axios.post(`${API_BASE}/digital-twin/simulate`, params, { timeout: 4000 });
       return res.data.data;
     } catch {
-      return {
-        scenario_name: params?.scenario_id ? String(params.scenario_id).toUpperCase() : "GRID_OUTAGE",
-        run_timestamp: new Date().toISOString(),
-        horizon_hours: 24,
-        total_solar_kwh: 580.0,
-        total_wind_kwh: 720.0,
-        total_demand_kwh: 1250.0,
-        total_unserved_energy_kwh: 0.0,
-        total_curtailed_kwh: 0.0,
-        max_grid_import_kw: 0.0,
-        min_battery_soc_pct: 22.4,
-        max_battery_soc_pct: 92.0,
-        islanding_resilience_score_pct: 100.0,
-        grid_outage_survived: true,
-        summary_notes: "Simulation completed successfully with 100% islanded microgrid survivability.",
-        timesteps: []
-      };
+      return mockDigitalTwinSimulation(params?.scenario_type || params?.scenario_id);
     }
   },
 
@@ -433,7 +419,7 @@ export const apiClient = {
       const res = await axios.post(`${API_BASE}/rl/dispatch`, {}, { timeout: 3000 });
       return res.data.data;
     } catch {
-      return [];
+      return mockRLTrajectory;
     }
   },
 
@@ -442,7 +428,7 @@ export const apiClient = {
       const res = await axios.get(`${API_BASE}/xai/global-importance?domain=${domain}`, { timeout: 3000 });
       return res.data.data;
     } catch {
-      return mockTreeShapGlobal;
+      return mockTreeShapGlobal(domain);
     }
   },
 
@@ -451,7 +437,7 @@ export const apiClient = {
       const res = await axios.get(`${API_BASE}/xai/local-waterfall?domain=${domain}&hour_index=${hour}`, { timeout: 3000 });
       return res.data.data;
     } catch {
-      return mockTreeShapWaterfall;
+      return mockTreeShapWaterfall(domain, hour);
     }
   },
 
